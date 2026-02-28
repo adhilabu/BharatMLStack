@@ -45,6 +45,25 @@ START_PREDATOR=false
 INIT_DUMMY_DATA=false
 ENABLE_LOCAL_BUILD=false
 
+# ---------------------------------------------------------------------------
+# docker_compose() — compatibility wrapper for Mac and Linux
+#
+# Modern Docker Desktop ships "docker compose" (V2 plugin) instead of the
+# standalone "docker-compose" binary.  This wrapper tries the plugin first
+# and falls back to the standalone binary so the script works on both.
+# ---------------------------------------------------------------------------
+docker_compose() {
+  if docker compose version &> /dev/null 2>&1; then
+    docker compose "$@"
+  elif command -v docker-compose &> /dev/null; then
+    docker-compose "$@"
+  else
+    echo "❌ Neither 'docker compose' (plugin) nor 'docker-compose' (standalone) was found."
+    echo "👉 Please install Docker Desktop (https://www.docker.com/products/docker-desktop/) or the Docker Compose plugin."
+    exit 1
+  fi
+}
+
 check_go_version() {
   if ! command -v go &> /dev/null; then
     echo "❌ Go is not installed."
@@ -499,7 +518,7 @@ start_init_services_if_missing() {
       echo "   ⏭️  Skipping $service (container already exists)"
     else
       echo "   🚀 Starting $service (container not found)"
-      (cd "$WORKSPACE_DIR" && docker-compose up -d "$service")
+      (cd "$WORKSPACE_DIR" && docker_compose up -d "$service")
     fi
   done
 }
@@ -616,16 +635,16 @@ start_selected_services() {
   # Rebuild db-init if dummy data is enabled (to ensure main-init.sh has the latest changes)
   if [[ "$INIT_DUMMY_DATA" == true ]]; then
     echo "   🔨 Rebuilding db-init container for dummy data support..."
-    (cd "$WORKSPACE_DIR" && INIT_DUMMY_DATA=true docker-compose build db-init)
+    (cd "$WORKSPACE_DIR" && INIT_DUMMY_DATA=true docker_compose build db-init)
   fi
   
   # Pass INIT_DUMMY_DATA to docker-compose
-  (cd "$WORKSPACE_DIR" && INIT_DUMMY_DATA="${INIT_DUMMY_DATA:-false}" CLUSTER_NAME="${CLUSTER_NAME:-bharatml-stack}" docker-compose up -d --build $SELECTED_SERVICES)
+  (cd "$WORKSPACE_DIR" && INIT_DUMMY_DATA="${INIT_DUMMY_DATA:-false}" CLUSTER_NAME="${CLUSTER_NAME:-bharatml-stack}" docker_compose up -d --build $SELECTED_SERVICES)
   start_init_services_if_missing
   
   echo ""
   echo "⏳ Waiting for services to start up..."
-  echo "   📋 You can monitor progress with: cd $WORKSPACE_DIR && docker-compose logs -f"
+  echo "   📋 You can monitor progress with: cd $WORKSPACE_DIR && docker compose logs -f"
   echo ""
   
   # Show brief status check
@@ -633,7 +652,7 @@ start_selected_services() {
     echo -n "🔄 Checking service status (attempt $i/30)... "
     
     # Check if at least some key services are running
-    running_services=$(cd "$WORKSPACE_DIR" && docker-compose ps --filter status=running --format "table {{.Name}}" | tail -n +2 | wc -l)
+    running_services=$(cd "$WORKSPACE_DIR" && docker_compose ps --filter status=running --format "table {{.Name}}" | tail -n +2 | wc -l)
     if [ "$running_services" -gt 0 ]; then
       echo "✅ Services are starting up! ($running_services containers running)"
       break
@@ -641,7 +660,7 @@ start_selected_services() {
     
     if [ $i -eq 30 ]; then
       echo "⏰ Services are still starting up. Check logs for details:"
-      echo "   cd $WORKSPACE_DIR && docker-compose logs"
+      echo "   cd $WORKSPACE_DIR && docker compose logs"
       break
     fi
     
@@ -798,13 +817,13 @@ show_access_info() {
   
   echo ""
   echo "🛠️  Useful Commands:"
-  echo "   View logs:     cd $WORKSPACE_DIR && docker-compose logs -f [service-name]"
-  echo "   Stop all:      cd $WORKSPACE_DIR && docker-compose down"
-  echo "   Restart:       cd $WORKSPACE_DIR && docker-compose restart [service-name]"
-  echo "   View status:   cd $WORKSPACE_DIR && docker-compose ps"
+  echo "   View logs:     cd $WORKSPACE_DIR && docker compose logs -f [service-name]"
+  echo "   Stop all:      cd $WORKSPACE_DIR && docker compose down"
+  echo "   Restart:       cd $WORKSPACE_DIR && docker compose restart [service-name]"
+  echo "   View status:   cd $WORKSPACE_DIR && docker compose ps"
   echo ""
   echo "🔍 If any service isn't responding:"
-  echo "   cd $WORKSPACE_DIR && docker-compose logs [service-name]"
+  echo "   cd $WORKSPACE_DIR && docker compose logs [service-name]"
   echo ""
 }
 
